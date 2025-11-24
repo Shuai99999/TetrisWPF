@@ -20,6 +20,16 @@ namespace TetrisWPF
         // size of each cell in pixels
         private const int cellSize = 24;
 
+        // Base window size for scaling calculations (default window size)
+        private const double baseWindowWidth = 400;
+        private const double baseWindowHeight = 600;
+
+        // Base sizes for UI elements
+        private const double baseNextCanvasSize = 100;
+        private const double baseButtonWidth = 120;
+        private const double baseButtonHeight = 35;
+        private const double baseFontSize = 16;
+
         // the game grid, 0 means empty, other numbers represent different tetromino IDs
         private int[,] grid = new int[rows, cols];
 
@@ -142,13 +152,71 @@ namespace TetrisWPF
             // handle key down events for controlling the tetrominoes
             this.KeyDown += MainWindow_KeyDown;
 
+            // Initialize scaling on window load
+            this.Loaded += (s, e) => 
+            {
+                // Apply initial scaling when window is loaded
+                ApplyScaling();
+            };
         }
 
         // Handle window size changes to maintain responsive layout
         private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // Viewbox automatically handles scaling, but we can add any additional logic here if needed
-            // The game canvas will automatically scale proportionally through the Viewbox
+            ApplyScaling();
+        }
+
+        // Apply scaling to all UI elements based on current window size
+        private void ApplyScaling()
+        {
+            // Calculate scaling factors based on window size
+            // Use the smaller scale factor to maintain aspect ratio and prevent distortion
+            double widthScale = this.ActualWidth / baseWindowWidth;
+            double heightScale = this.ActualHeight / baseWindowHeight;
+            double scale = Math.Min(widthScale, heightScale);
+
+            // Ensure minimum scale is 1.0 (100%) - elements should not be smaller than initial size
+            // This prevents elements from becoming too small when window is resized
+            scale = Math.Max(scale, 1.0);
+            // Ensure maximum scale to prevent elements from becoming too large
+            scale = Math.Min(scale, 2.0);
+
+            // Scale Next Canvas
+            if (NextCanvas != null)
+            {
+                NextCanvas.Width = baseNextCanvasSize * scale;
+                NextCanvas.Height = baseNextCanvasSize * scale;
+            }
+
+            // Scale Buttons
+            if (PauseButton != null)
+            {
+                PauseButton.Width = baseButtonWidth * scale;
+                PauseButton.Height = baseButtonHeight * scale;
+                PauseButton.FontSize = 12 * scale; // Base font size for buttons
+            }
+
+            if (RestartButton != null)
+            {
+                RestartButton.Width = baseButtonWidth * scale;
+                RestartButton.Height = baseButtonHeight * scale;
+                RestartButton.FontSize = 12 * scale; // Base font size for buttons
+            }
+
+            // Scale Text Elements
+            if (ScoreText != null)
+            {
+                ScoreText.FontSize = baseFontSize * scale;
+            }
+
+            // Note: NextLabel and ScoreLabel are simple text labels that don't need explicit scaling
+            // They will scale naturally with the window size through the StackPanel layout
+            // If you want to scale them explicitly, you can use FindName:
+            // var nextLabel = this.FindName("NextLabel") as TextBlock;
+            // if (nextLabel != null) nextLabel.FontSize = 12 * scale;
+
+            // Note: GameCanvas is automatically scaled by Viewbox in XAML
+            // PlayerNameText is also automatically scaled by Viewbox in XAML
         }
 
         // Pause/Resume button click event handler

@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using System.Windows.Media.Effects;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace TetrisWPF
 {
@@ -56,40 +57,17 @@ namespace TetrisWPF
         {
             InitializeComponent();
 
-            // User input for player name
-            playerName = Microsoft.VisualBasic.Interaction.InputBox("Enter your name(No more than 20 Characters):", "Player Name", "Player");
+            // Initialize UI components synchronously (non-blocking operations)
+            InitializeUI();
 
-            // If user cancels or inputs empty name, close the game
-            if (string.IsNullOrWhiteSpace(playerName))
-            {
-                // close the window
-                this.Close();
-                return; // exit constructor
-            }
+            // Load player name and initialize database asynchronously when window is loaded
+            this.Loaded += MainWindow_Loaded;
+        }
 
-            if (!string.IsNullOrEmpty(playerName) && playerName.Length > 20)
-                playerName = playerName.Substring(0, 20);
-
-            // database part: check or create user
-            using (var context = new TetrisContext())
-            {
-                // query if the user exists in the database
-                currentUser = context.Users.FirstOrDefault(u => u.Name == playerName);
-                if (currentUser == null)
-                {
-                    // it's a new user, create one
-                    currentUser = new User
-                    {
-                        Name = playerName,
-                        CreatedDate = DateTime.Now
-                    };
-                    context.Users.Add(currentUser);
-                    context.SaveChanges();
-                }
-            }
-
-            // display username on the right panel
-            PlayerNameText.Text = $"Player: {playerName}";
+        // Initialize UI components, non-blocking operations. UI will show up immediately when user starts the app.
+        // Otherwise, if we put async operations here, the UI will freeze until all async operations(like input dialog and database init) are done.
+        private void InitializeUI()
+        {
 
             // set backgrounds
             // we tried dark themes but they were not visually appealing
@@ -136,14 +114,13 @@ namespace TetrisWPF
             // draw the next tetromino on the NextCanvas
             DrawNext();
 
-            // initialize and start the timer
+            // initialize the timer (but don't start it yet - wait for user initialization)
             timer = new DispatcherTimer();
             // set interval to 500 milliseconds
             timer.Interval = TimeSpan.FromMilliseconds(500);
             // bind the Tick event to the Timer_Tick method, Tick event fires every interval, it acutually calls the move down method
             timer.Tick += Timer_Tick;
-            // start the timer
-            timer.Start();
+            // Timer will be started after user initialization in MainWindow_Loaded
 
             // initial draw and score update
             DrawGrid();
@@ -151,13 +128,72 @@ namespace TetrisWPF
 
             // handle key down events for controlling the tetrominoes
             this.KeyDown += MainWindow_KeyDown;
+        }
 
-            // Initialize scaling on window load
-            this.Loaded += (s, e) => 
+        // Async initialization when window is loaded
+        // Use Async and await to avoid blocking the UI thread
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
             {
-                // Apply initial scaling when window is loaded
+                // Show input dialog asynchronously (non-blocking)
+                playerName = await InputDialog.ShowAsync(this);
+
+                // If user cancels or inputs empty name, close the game
+                if (string.IsNullOrWhiteSpace(playerName))
+                {
+                    // close the window
+                    this.Close();
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(playerName) && playerName.Length > 20)
+                    playerName = playerName.Substring(0, 20);
+
+                // database part: check or create user (async, non-blocking)
+                await InitializeUserAsync();
+
+                // display username on the right panel (must be on UI thread)
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    PlayerNameText.Text = $"Player: {playerName}";
+                });
+
+                // Apply initial scaling after initialization
                 ApplyScaling();
-            };
+
+                // start the timer after initialization is complete
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing game: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                this.Close();
+            }
+        }
+
+        // Async method to initialize user in database
+        private async Task InitializeUserAsync()
+        {
+            await Task.Run(async () =>
+            {
+                using (var context = new TetrisContext())
+                {
+                    // query if the user exists in the database (async)
+                    currentUser = await context.Users.FirstOrDefaultAsync(u => u.Name == playerName);
+                    if (currentUser == null)
+                    {
+                        // it's a new user, create one
+                        currentUser = new User
+                        {
+                            Name = playerName,
+                            CreatedDate = DateTime.Now
+                        };
+                        context.Users.Add(currentUser);
+                        await context.SaveChangesAsync();
+                    }
+                }
+            });
         }
 
         // Handle window size changes to maintain responsive layout
@@ -167,6 +203,7 @@ namespace TetrisWPF
         }
 
         // Apply scaling to all UI elements based on current window size
+        // Calculate scaling factors and adjust sizes of canvases, buttons, and text elements
         private void ApplyScaling()
         {
             // Calculate scaling factors based on window size
@@ -211,7 +248,7 @@ namespace TetrisWPF
 
             // Note: NextLabel and ScoreLabel are simple text labels that don't need explicit scaling
             // They will scale naturally with the window size through the StackPanel layout
-            // If you want to scale them explicitly, you can use FindName:
+            // If we want to scale them explicitly, we can use FindName:
             // var nextLabel = this.FindName("NextLabel") as TextBlock;
             // if (nextLabel != null) nextLabel.FontSize = 12 * scale;
 
@@ -343,26 +380,19 @@ namespace TetrisWPF
             DrawGrid();
         }
 
-        // the game over method
-        private void GameOver()
+        // the game over method (async to avoid blocking UI)
+        private async void GameOver()
         {
             // stop the timer
             timer.Stop();
 
-            // save the score to database
-            SaveScore();
-
-            // retrieve top 5 scores from database
-            using (var context = new TetrisContext())
+            try
             {
-                var topScores = context.Scores
-                    .OrderByDescending(s => s.PlayedScore)
-                    .Take(5)
-                    .Join(context.Users,
-                          s => s.UserId,
-                          u => u.Id,
-                          (s, u) => new { u.Name, s.PlayedScore, s.ScoreDate })
-                    .ToList();
+                // save the score to database (async, non-blocking)
+                await SaveScoreAsync();
+
+                // retrieve top 5 scores from database (async, non-blocking)
+                var topScores = await GetTopScoresAsync();
 
                 // check if current score is in top 5
                 bool inTop5 = topScores.Any(s => s.Name == playerName && s.PlayedScore == score);
@@ -386,17 +416,50 @@ namespace TetrisWPF
                     message += $"\nYour Score: >> {playerName} - {score} <<\n";
                 }
 
-                MessageBoxResult result = MessageBox.Show(
-                    message + "\n\nDo you want to restart the game?",
-                    "Game Over",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
+                // Show message box on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBoxResult result = MessageBox.Show(
+                        message + "\n\nDo you want to restart the game?",
+                        "Game Over",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Information);
 
-                if (result == MessageBoxResult.Yes)
-                    RestartGame(false);
-                else
-                    this.Close();
+                    if (result == MessageBoxResult.Yes)
+                        RestartGame(false);
+                    else
+                        this.Close();
+                });
             }
+            catch (Exception ex)
+            {
+                // Show error message on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show($"Error saving score: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    RestartGame(false);
+                });
+            }
+        }
+
+        // Async method to get top scores
+        private async Task<List<(string Name, int PlayedScore, DateTime ScoreDate)>> GetTopScoresAsync()
+        {
+            return await Task.Run(async () =>
+            {
+                using (var context = new TetrisContext())
+                {
+                    var topScores = await context.Scores
+                        .OrderByDescending(s => s.PlayedScore)
+                        .Take(5)
+                        .Join(context.Users,
+                              s => s.UserId,
+                              u => u.Id,
+                              (s, u) => new { u.Name, s.PlayedScore, s.ScoreDate })
+                        .ToListAsync();
+                    return topScores.Select(s => (s.Name, s.PlayedScore, s.ScoreDate)).ToList();
+                }
+            });
         }
 
         // fix the current tetromino to the grid, called by MoveDown when it cannot move down further
@@ -631,27 +694,30 @@ namespace TetrisWPF
             DrawGrid();
         }
 
-        // save the current score to the database
-        private void SaveScore()
+        // save the current score to the database (async, non-blocking)
+        private async Task SaveScoreAsync()
         {
-            using (var context = new TetrisContext())
+            await Task.Run(async () =>
             {
-                // find the user by name in the database
-                var user = context.Users.FirstOrDefault(u => u.Name == playerName);
-                if (user != null)
+                using (var context = new TetrisContext())
                 {
-                    var scoreEntry = new Score
+                    // find the user by name in the database (async)
+                    var user = await context.Users.FirstOrDefaultAsync(u => u.Name == playerName);
+                    if (user != null)
                     {
-                        UserId = user.Id,
-                        PlayedScore = score,
-                        ScoreDate = DateTime.Now
-                    };
-                    // add the score entry to the Scores table
-                    context.Scores.Add(scoreEntry);
-                    // save changes to the database
-                    context.SaveChanges();
+                        var scoreEntry = new Score
+                        {
+                            UserId = user.Id,
+                            PlayedScore = score,
+                            ScoreDate = DateTime.Now
+                        };
+                        // add the score entry to the Scores table
+                        context.Scores.Add(scoreEntry);
+                        // save changes to the database (async)
+                        await context.SaveChangesAsync();
+                    }
                 }
-            }
+            });
 
             // Alternative: save to a local text file (not used in this version)
             // File.AppendAllText("scores.txt", $"{playerName}: {score}\n");

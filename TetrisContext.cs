@@ -9,22 +9,27 @@ namespace TetrisWPF
 {
     class TetrisContext : DbContext
     {
-        public DbSet<User> Users { get; set; }       // 用户信息表
-        public DbSet<Score> Scores { get; set; }     // 历史成绩表
+        // user info table
+        public DbSet<User> Users { get; set; }
+        // score history table
+        public DbSet<Score> Scores { get; set; }
 
+        // configure the database connection
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             var connectionString = "Server=localhost;Database=TetrisDB;Trusted_Connection=True;Encrypt=False;";
             optionsBuilder.UseSqlServer(connectionString);
         }
 
+        // configure the model relationships
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // 可以在这里配置关系和初始数据
+            // one-to-many relationship between User and Score
+            // one user has many scores
             modelBuilder.Entity<User>()
                 .HasMany(u => u.Scores)
                 .WithOne(s => s.User)
-                // 配置外键
+                // config foreign key, UserId in score table is the foreign key
                 .HasForeignKey(s => s.UserId);
         }
     }

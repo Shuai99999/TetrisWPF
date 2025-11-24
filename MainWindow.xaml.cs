@@ -144,6 +144,13 @@ namespace TetrisWPF
 
         }
 
+        // Handle window size changes to maintain responsive layout
+        private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // Viewbox automatically handles scaling, but we can add any additional logic here if needed
+            // The game canvas will automatically scale proportionally through the Viewbox
+        }
+
         // Pause/Resume button click event handler
         private void PauseButton_Click(object sender, RoutedEventArgs e)
         {

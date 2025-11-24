@@ -3,30 +3,36 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Tetris WPF" 
         Height="600" Width="400"
-        ResizeMode="NoResize">
+        MinHeight="400" MinWidth="300"
+        ResizeMode="CanResize"
+        SizeChanged="Window_SizeChanged">
     
     <Grid>
         <!-- Define two columns: one for the game canvas and one for the controls -->
         <Grid.ColumnDefinitions>
-            <!-- Game Canvas Column -->
-            <ColumnDefinition Width="250"/>
+            <!-- Game Canvas Column - use star sizing for responsiveness -->
+            <ColumnDefinition Width="2*" MinWidth="200"/>
             <!-- Control Panel Column -->
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*" MinWidth="120"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Canvas for Tetris Game -->
-        <Canvas x:Name="GameCanvas" Width="240" Height="480" Margin="5"/>
+        <!-- Use Viewbox to make the game canvas responsive to window size -->
+        <Viewbox Grid.Column="0" Stretch="Uniform" Margin="5">
+            <Canvas x:Name="GameCanvas" Width="240" Height="480"/>
+        </Viewbox>
 
         <!-- the right panel -->
         <StackPanel Grid.Column="1" Margin="5">
             <!-- display player name -->
-            <Viewbox Stretch="Uniform" Height="30" Margin="0,0,0,10">
+            <Viewbox Stretch="Uniform" MaxHeight="40" Margin="0,0,0,10">
                 <TextBlock x:Name="PlayerNameText" Text="Player: Unknown" FontWeight="Bold"/>
             </Viewbox>
 
             <!-- Next piece preview -->
             <TextBlock Text="Next:" FontWeight="Bold" Margin="0,0,0,5"/>
-            <Canvas x:Name="NextCanvas" Width="100" Height="100" Background="Gray"/>
+            <Viewbox Stretch="Uniform" MaxWidth="120" MaxHeight="120" HorizontalAlignment="Left">
+                <Canvas x:Name="NextCanvas" Width="100" Height="100" Background="Gray"/>
+            </Viewbox>
 
             <!-- Score display -->
             <TextBlock Text="Score:" FontWeight="Bold" Margin="0,10,0,0"/>
